@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161F27">
+<title>Biweekly Budget</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Budget">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1EEE4; --ink:#161F27; --ink-soft:#6B675E;
+    --green:#2F6844; --green-soft:#DCEBE1;
+    --gold:#B8860B; --gold-soft:#F4E9CC;
+    --red:#A6432F; --red-soft:#F6E4DF;
+    --slate:#3E566B; --rule:#D6CFBA; --card:#FFFFFF;
+    --nav-h:64px;
+    --serif:'Zilla Slab', Georgia, serif;
+    --sans:'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans); overscroll-behavior-y:none;}
+  body{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 20px);}
+  button{font-family:inherit; cursor:pointer;}
+
+  .topbar{position:sticky; top:0; z-index:20; background:var(--ink); color:#fff;
+    padding:calc(env(safe-area-inset-top) + 10px) 16px 10px; display:flex; justify-content:space-between; align-items:center;}
+  .topbar h1{font-family:var(--serif); font-size:1.15rem; margin:0;}
+  .saved{font-family:var(--mono); font-size:.68rem; opacity:.75;}
+
+  main{padding:14px 14px 0; max-width:560px; margin:0 auto;}
+  .view{display:none;} .view.active{display:block;}
+  h2{font-family:var(--serif); font-size:1.05rem; margin:0;}
+  .lbl{display:block; font-size:.7rem; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-soft); margin:0 0 5px;}
+  .hint{font-size:.76rem; color:var(--ink-soft); line-height:1.5; margin:8px 0 0;}
+
+  .inp, input[type=text], input[type=number], input[type=date], textarea{
+    width:100%; height:46px; padding:0 12px; font-size:16px; font-family:var(--sans);
+    color:var(--ink); background:#fff; border:1.5px solid var(--rule); border-radius:10px;
+    appearance:none; -webkit-appearance:none; min-width:0;}
+  input[type=number]{font-family:var(--mono); text-align:right;}
+  input[type=date]{font-family:var(--mono); font-size:14px;}
+  textarea{height:110px; padding:10px 12px; font-family:var(--mono); font-size:13px; resize:none;}
+  input:focus, textarea:focus{outline:none; border-color:var(--green); box-shadow:0 0 0 3px rgba(47,104,68,.18);}
+  input.big{height:56px; font-size:22px; font-weight:600; color:var(--green);}
+
+  .card{background:var(--card); border:1.5px solid var(--ink); border-radius:14px; padding:14px; margin-bottom:12px;}
+  .card.soft{background:var(--gold-soft); border-color:var(--rule);}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;}
+  .stat{border-radius:14px; padding:12px 14px; color:#fff; background:var(--ink); min-width:0;}
+  .stat .s-lbl{font-size:.64rem; text-transform:uppercase; letter-spacing:.5px; opacity:.8; line-height:1.25; min-height:1.6em;}
+  .stat .s-val{font-family:var(--mono); font-size:1.12rem; font-weight:600; margin-top:3px; overflow-wrap:anywhere;}
+  .stat.needs{background:var(--red);} .stat.wants{background:var(--gold);}
+  .stat.save{background:var(--green);} .stat.extra{background:var(--slate);}
+  .stat.wide{grid-column:1 / -1; margin-bottom:10px;}
+  .stat.wide .s-lbl{min-height:0;}
+
+  .trio{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px;}
+  .trio div{background:#fff; border:1.5px solid var(--rule); border-radius:12px; padding:9px 8px; text-align:center; min-width:0;}
+  .trio small{display:block; font-size:.6rem; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-soft);}
+  .trio b{display:block; font-family:var(--mono); font-size:.84rem; margin-top:3px; overflow-wrap:anywhere;}
+  .trio .good b{color:var(--green);} .trio .neg b{color:var(--red);}
+
+  .seg{display:flex; background:#E6E1D1; border-radius:12px; padding:4px; margin-bottom:14px; gap:4px;}
+  .seg button{flex:1; border:none; background:transparent; height:40px; border-radius:9px; font-size:.8rem; font-weight:600; color:var(--ink-soft); white-space:nowrap;}
+  .seg button.on{background:var(--ink); color:#fff;}
+  .subpanel{display:none;} .subpanel.on{display:block;}
+
+  .row{background:#fff; border:1.5px solid var(--rule); border-radius:14px; padding:10px; margin-bottom:10px;}
+  .row.unpaid{box-shadow:inset 5px 0 0 var(--gold); background:#FFFDF6;}
+  .row-top{display:flex; gap:8px; align-items:center; margin-bottom:8px;}
+  .fields{display:grid; gap:8px;} .fields.two{grid-template-columns:1fr 1fr;}
+  .fields label{display:block; font-size:.62rem; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-soft); min-width:0;}
+  .fields label .inp{margin-top:3px;}
+  .del{flex:none; width:44px; height:44px; border-radius:10px; border:1.5px solid var(--rule); background:#fff; color:var(--ink-soft); font-size:1rem;}
+  .del:active{background:var(--red-soft); color:var(--red); border-color:var(--red);}
+  .paidbtn{flex:none; width:44px; height:44px; border-radius:50%; border:2px solid var(--rule); background:#fff; color:transparent; font-size:1.2rem; font-weight:700;}
+  .paidbtn.on{background:var(--green); border-color:var(--green); color:#fff;}
+  .addbtn{width:100%; height:50px; border:2px dashed var(--rule); background:transparent; border-radius:14px; font-size:.92rem; font-weight:600; color:var(--green); margin-bottom:12px;}
+  .addbtn:active{background:var(--green-soft);}
+
+  .chips{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;}
+  .chips button{flex:1 1 auto; min-width:56px; height:36px; border-radius:9px; border:1.5px solid var(--rule); background:#fff; font-size:.72rem; font-weight:600; color:var(--ink-soft); padding:0 6px;}
+  .chips button.on{background:var(--ink); border-color:var(--ink); color:#fff;}
+  .chips button.on.is-card{background:var(--red); border-color:var(--red);}
+  .rowfoot{display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:8px;}
+  .movebtn{background:none; border:1.5px solid var(--rule); border-radius:9px; height:36px; padding:0 12px; font-size:.74rem; font-weight:600; color:var(--ink-soft);}
+  .movebtn:active{border-color:var(--green); color:var(--green);}
+  .paidtag{font-size:.7rem; color:var(--gold); font-weight:600;}
+
+  .breakdown{font-size:.72rem; color:var(--ink-soft); text-align:center; margin:-4px 0 12px;}
+  .breakdown b{font-family:var(--mono); color:var(--ink);}
+  .note-line{font-size:.74rem; color:var(--ink-soft); margin:-4px 0 12px; padding:0 2px;}
+  .note-line b{font-family:var(--mono); color:var(--ink);}
+
+  .goal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px;}
+  .pill{font-family:var(--mono); font-size:.68rem; background:var(--green-soft); color:var(--green); padding:4px 9px; border-radius:20px; font-weight:600; white-space:nowrap;}
+  .pill.owe{background:var(--red-soft); color:var(--red);}
+  .goal-big{font-family:var(--mono); font-size:1.6rem; font-weight:600; color:var(--green); overflow-wrap:anywhere;}
+  .goal-big small{display:block; font-size:.78rem; color:var(--ink-soft); font-weight:400; margin-top:2px;}
+  .meter{height:20px; background:#EDE8D8; border-radius:10px; overflow:hidden; margin:12px 0 8px;}
+  .fill{height:100%; width:0%; background:linear-gradient(90deg,var(--green),#4C8F68); border-radius:10px; transition:width .4s ease;}
+  .meter-meta{display:flex; justify-content:flex-end; font-family:var(--mono); font-size:.76rem; color:var(--ink-soft); margin-bottom:14px;}
+  .mini-head{display:flex; justify-content:space-between; font-size:.84rem; font-weight:600; margin-bottom:6px;}
+  .mini-head span:last-child{font-family:var(--mono); font-weight:500; color:var(--ink-soft);}
+
+  .btn{height:46px; padding:0 18px; border-radius:10px; border:none; background:var(--ink); color:#fff; font-size:.9rem; font-weight:600;}
+  .btn:active{background:var(--green);}
+  .btn.ghost{background:#fff; color:var(--ink); border:1.5px solid var(--rule);}
+  .btn.danger{background:var(--red);}
+  .btn.block{width:100%;}
+  .inline{display:flex; gap:8px;} .inline input{flex:1;}
+
+  details.hist{background:#fff; border:1.5px solid var(--rule); border-radius:14px; margin-bottom:10px; overflow:hidden;}
+  details.hist summary{list-style:none; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; font-weight:600; font-size:.9rem; min-height:52px;}
+  details.hist summary::-webkit-details-marker{display:none;}
+  details.hist summary small{display:block; font-family:var(--mono); font-weight:400; font-size:.7rem; color:var(--ink-soft); margin-top:2px;}
+  details.hist summary::after{content:'▾'; color:var(--ink-soft);}
+  details.hist[open] summary::after{content:'▴';}
+  .hist-body{padding:2px 14px 14px; font-size:.82rem; border-top:1px solid var(--rule);}
+  .hist-body h4{font-family:var(--serif); margin:12px 0 4px; font-size:.86rem;}
+  .hl{display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-bottom:1px dotted var(--rule);}
+  .hl span:last-child{font-family:var(--mono); white-space:nowrap;}
+  .empty{text-align:center; color:var(--ink-soft); font-size:.85rem; padding:18px 10px; font-style:italic;}
+
+  nav.bottom{position:fixed; left:0; right:0; bottom:0; z-index:30; background:#fff; border-top:1.5px solid var(--ink);
+    display:grid; grid-template-columns:repeat(5,1fr); padding-bottom:env(safe-area-inset-bottom);}
+  nav.bottom button{height:var(--nav-h); border:none; background:transparent; color:var(--ink-soft);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:.64rem; font-weight:600;}
+  nav.bottom svg{width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;}
+  nav.bottom button.active{color:var(--green);}
+
+  .toast{position:fixed; left:50%; transform:translate(-50%,20px); bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 14px);
+    background:var(--ink); color:#fff; padding:11px 16px; border-radius:24px; font-size:.84rem; z-index:50;
+    display:flex; gap:12px; align-items:center; opacity:0; pointer-events:none; transition:.25s; max-width:92vw;}
+  .toast.show{opacity:1; transform:translate(-50%,0); pointer-events:auto;}
+  .toast button{background:none; border:none; color:#8FD3A9; font-weight:700; font-size:.84rem; padding:2px 4px;}
+  .backdrop{position:fixed; inset:0; background:rgba(22,31,39,.5); z-index:60; display:none; align-items:flex-end;}
+  .backdrop.show{display:flex;}
+  .sheet{background:#fff; width:100%; border-radius:20px 20px 0 0; padding:20px 18px calc(18px + env(safe-area-inset-bottom)); max-width:560px; margin:0 auto;}
+  .sheet p{margin:0 0 16px; font-size:.95rem; line-height:1.5;}
+  .sheet .acts{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Biweekly Budget</h1>
+  <span class="saved" id="savedTag">Loading…</span>
+</div>
+
+<main>
+
+  <!-- HOME -->
+  <section class="view active" id="view-home">
+    <div class="card">
+      <label class="lbl">Pay period label</label>
+      <input type="text" data-field="periodLabel" placeholder="e.g. Oct 16–31, 2026" autocomplete="off">
+      <label class="lbl" style="margin-top:14px;">Total income this cutoff (₱)</label>
+      <input type="number" inputmode="decimal" step="0.01" class="big" data-field="income" data-num="1" placeholder="0.00">
+    </div>
+
+    <div class="grid2">
+      <div class="stat needs"><div class="s-lbl" id="capNeedsLbl">Essentials 50%</div><div class="s-val" id="capNeeds">₱0.00</div></div>
+      <div class="stat wants"><div class="s-lbl" id="capWantsLbl">Non-Essentials 30%</div><div class="s-val" id="capWants">₱0.00</div></div>
+    </div>
+    <div class="stat save wide">
+      <div class="s-lbl">Savings 20% — set this aside</div>
+      <div class="s-val" id="capSave">₱0.00</div>
+    </div>
+    <div class="grid2">
+      <div class="stat"><div class="s-lbl">Total expenses</div><div class="s-val" id="totalExpenses">₱0.00</div></div>
+      <div class="stat extra"><div class="s-lbl">Extra (unused Essentials)</div><div class="s-val" id="extra">₱0.00</div></div>
+    </div>
+
+    <div class="card" data-tab="goal">
+      <div class="mini-head"><span>Room Repair</span><span id="homeRoomTxt">₱0.00</span></div>
+      <div class="meter"><div class="fill" id="homeRoomFill"></div></div>
+    </div>
+  </section>
+
+  <!-- SPEND -->
+  <section class="view" id="view-spend">
+    <div class="seg">
+      <button class="on" data-seg="essentials">Essentials</button>
+      <button data-seg="nonEss">Non-Essentials</button>
+    </div>
+
+    <div class="subpanel on" id="sub-essentials">
+      <div class="trio">
+        <div><small>Budgeted</small><b id="essBudget">₱0.00</b></div>
+        <div><small>Spent</small><b id="essActual">₱0.00</b></div>
+        <div class="good" id="essLeftBox"><small>Left</small><b id="essLeft">₱0.00</b></div>
+      </div>
+      <div class="breakdown" id="essBreakdown"></div>
+      <div id="list-essentials"></div>
+      <button class="addbtn" data-add="essentials">+ Add expense</button>
+      <p class="hint" style="margin-top:0;">Untick the circle for something you owe but haven't paid yet. Unticked rows don't count as spent.</p>
+    </div>
+
+    <div class="subpanel" id="sub-nonEss">
+      <div class="card soft">
+        <label class="lbl" style="color:#6b5310;">Moved from Essentials (₱)</label>
+        <input type="number" inputmode="decimal" step="0.01" min="0" data-field="moveFromEss" data-num="1" placeholder="0.00">
+        <p class="hint">For example, groceries paid from the same account as your Wants. Lowers Essentials and raises Non-Essentials by the same amount.</p>
+      </div>
+      <div class="trio">
+        <div><small>Cap</small><b id="nonEssCap">₱0.00</b></div>
+        <div><small>Spent</small><b id="nonEssTotal">₱0.00</b></div>
+        <div class="good" id="nonEssLeftBox"><small>Left</small><b id="nonEssLeft">₱0.00</b></div>
+      </div>
+      <div class="note-line" id="cardNote"></div>
+      <div id="list-nonEss"></div>
+      <button class="addbtn" data-add="nonEssentials">+ Add expense</button>
+      <button class="addbtn" data-action="cashLeft" style="color:var(--ink-soft);">↩ Cash left over at the end</button>
+      <p class="hint" style="margin-top:0;">Withdrew cash? Log the withdrawal as one expense. At the end of the cutoff, tap the button above and enter the cash you still have as a minus amount.</p>
+    </div>
+  </section>
+
+  <!-- CARDS / UNPAID -->
+  <section class="view" id="view-cards">
+    <div class="card">
+      <div class="goal-head"><h2>Still unpaid</h2><span class="pill" id="unpaidPill">₱0.00</span></div>
+      <div id="list-unpaid"></div>
+      <p class="hint">Anything you've unticked in Essentials or Non-Essentials shows here. Tick it once you've paid and it counts as spending.</p>
+    </div>
+
+    <div id="list-cards"></div>
+    <button class="addbtn" data-add="cards">+ Add a card</button>
+    <p class="hint" style="margin-top:0;">Each card you add gets its own tag in the payment chips, so you can tell which card a purchase went on.</p>
+  </section>
+
+  <!-- ROOM REPAIR GOAL -->
+  <section class="view" id="view-goal">
+    <div class="card">
+      <div class="goal-head"><h2>Room Repair</h2></div>
+      <div class="goal-big"><span id="roomSavedTxt">₱0.00</span><small>of <span id="roomGoalTxt">₱0.00</span></small></div>
+      <div class="meter"><div class="fill" id="roomFill"></div></div>
+      <div class="meter-meta"><span id="roomLeft">₱0.00 left</span></div>
+
+      <label class="lbl">Amount saved so far (₱)</label>
+      <input type="number" inputmode="decimal" step="0.01" data-field="roomSaved" data-num="1" placeholder="0.00">
+      <p class="hint" style="margin-top:6px;">Type whatever you actually have set aside for the repair. Nothing is added automatically, so this always matches your bank.</p>
+
+      <label class="lbl" style="margin-top:14px;">Add to it</label>
+      <div class="inline">
+        <input type="number" inputmode="decimal" step="0.01" id="roomAdd" placeholder="e.g. 4500">
+        <button class="btn" data-action="addRoom">Add</button>
+      </div>
+      <p class="hint" style="margin-top:6px;">Adds to the amount above so you can watch the bar move.</p>
+
+      <label class="lbl" style="margin-top:14px;">Goal amount (₱)</label>
+      <input type="number" inputmode="decimal" step="0.01" data-field="roomGoal" data-num="1">
+    </div>
+  </section>
+
+  <!-- MORE -->
+  <section class="view" id="view-more">
+    <div class="card" id="installCard">
+      <h2 style="margin-bottom:6px;">Add to your home screen</h2>
+      <p class="hint" id="installHow" style="margin:0 0 12px;"></p>
+      <button class="btn block" id="installBtn" style="display:none;">Install app</button>
+      <p class="hint" id="installedNote" style="display:none;margin:0;">Running as an app. You're all set.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:6px;">Done with this cutoff?</h2>
+      <p class="hint" style="margin:0 0 12px;">Saves this period to your history and clears the sheet for the next one. Your Room Repair amount and card balances are kept.</p>
+      <button class="btn block" data-action="archive">📁 Archive this period</button>
+    </div>
+
+    <h2 style="margin:18px 2px 10px;">Period history</h2>
+    <div id="list-history"></div>
+
+    <div class="card" style="margin-top:18px;">
+      <h2 style="margin-bottom:6px;">Backup &amp; restore</h2>
+      <p class="hint" style="margin:0 0 12px;">Copy your data to move it to another device, or paste a backup here to restore it.</p>
+      <div class="inline" style="margin-bottom:10px;">
+        <button class="btn ghost" style="flex:1;" data-action="showBackup">Show backup</button>
+        <button class="btn ghost" style="flex:1;" data-action="copyBackup">Copy</button>
+      </div>
+      <textarea id="backupBox" placeholder="Backup text appears here. To restore, paste it here and tap Restore." spellcheck="false"></textarea>
+      <button class="btn block" style="margin-top:10px;" data-action="restoreBackup">Restore from pasted backup</button>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:6px;">Start over</h2>
+      <p class="hint" style="margin:0 0 12px;">Clears everything: income, all lists, your cards, the Room Repair amount and all history.</p>
+      <button class="btn danger block" data-action="resetAll">🗑️ Reset all data</button>
+    </div>
+  </section>
+
+</main>
+
+<nav class="bottom" aria-label="Main">
+  <button class="active" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+  <button data-tab="spend"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Spend</button>
+  <button data-tab="cards"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Cards</button>
+  <button data-tab="goal"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>Goal</button>
+  <button data-tab="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>More</button>
+</nav>
+
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="toastAct" style="display:none;"></button></div>
+
+<div class="backdrop" id="backdrop">
+  <div class="sheet">
+    <p id="sheetMsg"></p>
+    <div class="acts">
+      <button class="btn ghost" id="sheetCancel">Cancel</button>
+      <button class="btn danger" id="sheetOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const fmt  = n => '₱' + (Number(n)||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtS = n => '₱' + (Number(n)||0).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:2});
+const esc  = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const numVal = v => (Number(v) ? Number(v) : '');
+const todayISO = () => new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+const $ = id => document.getElementById(id);
+const setText = (id,t) => { const el = $(id); if(el) el.textContent = t; };
+
+const hasClaudeStorage = typeof window.storage !== 'undefined' && window.storage !== null;
+const store = {
+  async get(k){ if(hasClaudeStorage) return await window.storage.get(k); const raw = localStorage.getItem(k); return raw ? {value:raw} : null; },
+  async set(k,v){ if(hasClaudeStorage) return await window.storage.set(k,v); localStorage.setItem(k,v); return {value:v}; }
+};
+const KEY = 'budgetsheet:state';
+const BASE_METHODS = ['Cash','Debit','GCash'];
+
+function defaults(){
+  return {
+    income: 0, periodLabel: "", history: [],
+    essentials: [
+      {desc:"Groceries", budget:5000, amount:0, date:"", method:"", paid:true},
+      {desc:"Transportation", budget:1500, amount:0, date:"", method:"", paid:true},
+      {desc:"House / Rent", budget:3000, amount:0, date:"", method:"", paid:true},
+      {desc:"Internet", budget:0, amount:0, date:"", method:"", paid:true},
+      {desc:"Electricity", budget:0, amount:0, date:"", method:"", paid:true}
+    ],
+    nonEssentials: [{desc:"", budget:0, amount:0, date:"", method:"", paid:true}],
+    cards: [
+      {id:'c1', name:"BPI", balance:0, payment:0},
+      {id:'c2', name:"UB", balance:0, payment:0}
+    ],
+    roomGoal: 100000, roomSaved: 0,
+    moveFromEss: 0
+  };
+}
+
+function normRow(r){
+  return {
+    desc: r.desc || "",
+    budget: Number(r.budget)||0,
+    amount: Number(r.amount ?? r.actual ?? 0)||0,
+    date: r.date || r.datePaid || r.dueDate || "",
+    method: r.method || "",
+    paid: r.paid === false ? false : true
+  };
+}
+
+function normalizeState(s){
+  const d = defaults();
+  const out = Object.assign({}, d, s || {});
+  out.essentials = Array.isArray(s?.essentials) ? s.essentials.map(normRow) : d.essentials;
+  out.nonEssentials = Array.isArray(s?.nonEssentials) ? s.nonEssentials.map(normRow) : d.nonEssentials;
+  out.history = Array.isArray(s?.history) ? s.history : [];
+
+  // Older versions kept a separate Bills list; bills are just rows you tick when paid.
+  if(Array.isArray(s?.bills) && s.bills.length){
+    out.essentials = out.essentials.concat(s.bills.map(b => ({
+      desc:b.desc||"", budget:0, amount:Number(b.amtDue)||0,
+      date:b.datePaid||b.dueDate||"", method:"", paid:b.paid === false ? false : true})));
+  }
+  delete out.bills;
+  out.essentials = out.essentials.filter(r => (r.desc||'').trim().toLowerCase() !== 'credit card bills');
+
+  // Cards: upgrade the old single-card shape into a list.
+  if(Array.isArray(s?.cards) && s.cards.length){
+    out.cards = s.cards.map((c,i) => ({id: c.id || ('c'+(i+1)), name: c.name || ('Card '+(i+1)),
+      balance: Number(c.balance)||0, payment: Number(c.payment ?? c.paid ?? 0)||0}));
+  } else if(s?.card && typeof s.card === 'object'){
+    out.cards = [
+      {id:'c1', name:"BPI", balance:Number(s.card.balance)||0, payment:Number(s.card.paid)||0},
+      {id:'c2', name:"UB", balance:0, payment:0}
+    ];
+  } else {
+    out.cards = d.cards;
+  }
+  delete out.card;
+
+  // Rows tagged with the old generic "Card" now point at the first card.
+  const firstCard = out.cards[0]?.name;
+  const retag = r => { if(r.method === 'Card' && firstCard) r.method = firstCard; return r; };
+  out.essentials = out.essentials.map(retag);
+  out.nonEssentials = out.nonEssentials.map(retag);
+
+  out.roomGoal = Number(s?.roomGoal ?? s?.goalAmount ?? d.roomGoal)||0;
+  out.roomSaved = Number(s?.roomSaved)||0;
+
+  // Features that were removed.
+  ['savings','splitRoom','efGoalAmount','efAlreadySaved','manualEfExtra','manualRoomExtra','roomAdjust','goalAmount','goalSaved','efGoalSaved']
+    .forEach(k => delete out[k]);
+  return out;
+}
+
+let state = defaults();
+let saveTimer = null;
+function setSaved(t){ setText('savedTag', t); }
+function save(){
+  clearTimeout(saveTimer); setSaved('Saving…');
+  saveTimer = setTimeout(async () => {
+    try{ await store.set(KEY, JSON.stringify(state));
+      setSaved('Saved ' + new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}));
+    }catch(e){ console.error(e); setSaved('Not saved'); }
+  }, 350);
+}
+async function load(){
+  try{ const r = await store.get(KEY); state = (r && r.value) ? normalizeState(JSON.parse(r.value)) : defaults(); }
+  catch(e){ state = defaults(); }
+  setSaved('Ready'); renderAll();
+}
+
+const methodList = () => BASE_METHODS.concat(state.cards.map(c => c.name).filter(n => (n||'').trim()));
+const isCardMethod = m => state.cards.some(c => c.name === m);
+
+function compute(){
+  const income = Number(state.income)||0;
+  const moveAmt = income > 0 ? Math.max(0, Math.min(Number(state.moveFromEss)||0, income*0.5)) : 0;
+  const capNeeds = income*0.5 - moveAmt, capWants = income*0.3 + moveAmt, capSave = income*0.2;
+
+  const essBudget = state.essentials.reduce((s,r)=>s+(Number(r.budget)||0),0);
+  const essTyped = state.essentials.filter(r=>r.paid!==false).reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const cardPayments = state.cards.reduce((s,c)=>s+(Number(c.payment)||0),0);
+  const essActual = essTyped + cardPayments;
+  const nonEss = state.nonEssentials.filter(r=>r.paid!==false).reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const unpaid = state.essentials.concat(state.nonEssentials)
+    .filter(r=>r.paid===false).reduce((s,r)=>s+(Number(r.amount)||0),0);
+
+  const all = state.essentials.concat(state.nonEssentials).filter(r=>r.paid!==false);
+  const chargedBy = {};
+  state.cards.forEach(c => { chargedBy[c.id] = all.filter(r=>r.method===c.name).reduce((s,r)=>s+(Number(r.amount)||0),0); });
+  const onCard = Object.values(chargedBy).reduce((s,v)=>s+v,0);
+
+  return {income, moveAmt, capNeeds, capWants, capSave, essBudget, essTyped, essActual,
+          nonEss, unpaid, cardPayments, chargedBy, onCard};
+}
+
+function signClass(boxId, val){ const el = $(boxId); if(el){ el.classList.toggle('neg', val<0); el.classList.toggle('good', val>=0); } }
+
+function updateTotals(){
+  const c = compute();
+  setText('capNeeds', fmt(c.capNeeds)); setText('capWants', fmt(c.capWants)); setText('capSave', fmt(c.capSave));
+  const movedLbl = (base, sign) => c.moveAmt>0
+    ? `${base}<span style="display:block;text-transform:none;letter-spacing:0;opacity:.9;">${sign}${fmtS(c.moveAmt)} moved</span>` : base;
+  $('capNeedsLbl').innerHTML = movedLbl('Essentials 50%','−');
+  $('capWantsLbl').innerHTML = movedLbl('Non-Essentials 30%','+');
+
+  const essLeft = c.capNeeds - c.essActual, nonLeft = c.capWants - c.nonEss;
+  setText('totalExpenses', fmt(c.essActual + c.nonEss)); setText('extra', fmt(essLeft));
+  setText('essBudget', fmt(c.essBudget)); setText('essActual', fmt(c.essActual)); setText('essLeft', fmt(essLeft));
+  signClass('essLeftBox', essLeft);
+  setText('nonEssCap', fmt(c.capWants)); setText('nonEssTotal', fmt(c.nonEss)); setText('nonEssLeft', fmt(nonLeft));
+  signClass('nonEssLeftBox', nonLeft);
+
+  $('essBreakdown').innerHTML = c.cardPayments>0 ? `Includes card payments of <b>${fmt(c.cardPayments)}</b>` : '';
+  $('cardNote').innerHTML = c.onCard>0 ? `<b>${fmt(c.onCard)}</b> of your spending went on a card, so it hasn't left your account yet.` : '';
+  setText('unpaidPill', fmt(c.unpaid));
+
+  const goal = Number(state.roomGoal)||0, saved = Number(state.roomSaved)||0;
+  const pct = goal>0 ? Math.min(Math.max(saved/goal*100,0),100) : 0;
+  $('roomFill').style.width = pct+'%'; $('homeRoomFill').style.width = pct+'%';
+  setText('roomSavedTxt', fmt(saved)); setText('roomGoalTxt', fmt(goal));
+  setText('roomLeft', fmt(Math.max(goal-saved,0))+' left');
+  setText('homeRoomTxt', fmt(saved)+' of '+fmt(goal));
+}
+
+function expenseRow(list, r, i){
+  const other = list === 'essentials' ? 'nonEssentials' : 'essentials';
+  const moveLabel = list === 'essentials' ? '→ Non-Essentials' : '→ Essentials';
+  return `
+  <div class="row ${r.paid===false?'unpaid':''}">
+    <div class="row-top">
+      <button class="paidbtn ${r.paid!==false?'on':''}" data-toggle="${list}" data-idx="${i}" aria-pressed="${r.paid!==false}" aria-label="Paid">✓</button>
+      <input class="inp" type="text" data-list="${list}" data-idx="${i}" data-key="desc" value="${esc(r.desc)}" placeholder="What was it?" autocomplete="off">
+      <button class="del" data-del="${list}" data-idx="${i}" aria-label="Delete">✕</button>
+    </div>
+    <div class="fields two">
+      ${list==='essentials'
+        ? `<label>Budget<input class="inp" type="number" inputmode="decimal" step="0.01" data-list="${list}" data-idx="${i}" data-key="budget" value="${numVal(r.budget)}" placeholder="0"></label>`
+        : `<label>Date<input class="inp" type="date" data-list="${list}" data-idx="${i}" data-key="date" value="${esc(r.date)}"></label>`}
+      <label>Amount<input class="inp" type="number" inputmode="decimal" step="0.01" data-list="${list}" data-idx="${i}" data-key="amount" value="${numVal(r.amount)}" placeholder="0"></label>
+    </div>
+    ${list==='essentials' ? `<div class="fields" style="margin-top:8px;"><label>Date<input class="inp" type="date" data-list="${list}" data-idx="${i}" data-key="date" value="${esc(r.date)}"></label></div>` : ''}
+    <div class="chips">${methodList().map(m => `<button data-method="${list}:${i}" data-m="${esc(m)}" class="${r.method===m?'on':''} ${isCardMethod(m)?'is-card':''}">${esc(m)}</button>`).join('')}</div>
+    <div class="rowfoot">
+      <span class="paidtag">${r.paid===false?'Not paid yet':''}</span>
+      <button class="movebtn" data-move="${list}:${i}:${other}">${moveLabel}</button>
+    </div>
+  </div>`;
+}
+
+function renderLists(){
+  $('list-essentials').innerHTML = state.essentials.length
+    ? state.essentials.map((r,i)=>expenseRow('essentials',r,i)).join('') : '<div class="empty">No expenses yet.</div>';
+  $('list-nonEss').innerHTML = state.nonEssentials.length
+    ? state.nonEssentials.map((r,i)=>expenseRow('nonEssentials',r,i)).join('') : '<div class="empty">No expenses yet.</div>';
+
+  const c = compute();
+  $('list-cards').innerHTML = state.cards.length ? state.cards.map((card,i) => {
+    const charged = c.chargedBy[card.id]||0;
+    const after = (Number(card.balance)||0) + charged - (Number(card.payment)||0);
+    return `
+    <div class="card">
+      <div class="goal-head">
+        <input class="inp" type="text" data-card="${i}:name" value="${esc(card.name)}" placeholder="Card name" style="font-family:var(--serif);font-weight:600;">
+        <button class="del" data-delcard="${i}" aria-label="Delete card">✕</button>
+      </div>
+      <div class="goal-head" style="margin:6px 0 10px;"><span class="pill owe">${fmt(after)} owed</span></div>
+      <label class="lbl">Balance owed (from your statement)</label>
+      <input type="number" inputmode="decimal" step="0.01" data-card="${i}:balance" value="${numVal(card.balance)}">
+      <label class="lbl" style="margin-top:12px;">Payment you made this cutoff</label>
+      <input type="number" inputmode="decimal" step="0.01" data-card="${i}:payment" value="${numVal(card.payment)}">
+      <div class="trio" style="margin-top:14px;margin-bottom:0;">
+        <div><small>Charged</small><b>${fmt(charged)}</b></div>
+        <div><small>You paid</small><b>${fmt(card.payment||0)}</b></div>
+        <div><small>Balance after</small><b>${fmt(after)}</b></div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty">No cards yet.</div>';
+
+  const items = [];
+  state.essentials.forEach((r,i)=>{ if(r.paid===false) items.push({list:'essentials',i,r,tag:'Essentials'}); });
+  state.nonEssentials.forEach((r,i)=>{ if(r.paid===false) items.push({list:'nonEssentials',i,r,tag:'Non-Essentials'}); });
+  $('list-unpaid').innerHTML = items.length ? items.map(u => `
+    <div class="row unpaid"><div class="row-top">
+      <button class="paidbtn" data-toggle="${u.list}" data-idx="${u.i}" aria-label="Mark paid">✓</button>
+      <span style="flex:1;"><b>${esc(u.r.desc)||'(no name)'}</b><small style="display:block;color:var(--ink-soft);font-size:.7rem;">${u.tag}</small></span>
+      <span style="font-family:var(--mono);font-weight:600;">${fmt(u.r.amount)}</span>
+    </div></div>`).join('') : '<div class="empty">Nothing unpaid. Nice.</div>';
+
+  renderHistory();
+}
+
+function histLines(rows){
+  if(!Array.isArray(rows)) return '<div class="hl"><span>—</span><span></span></div>';
+  const used = rows.filter(r => (r.desc||'').trim() || Number(r.amount ?? r.actual ?? 0));
+  return used.length ? used.map(r => `<div class="hl"><span>${esc(r.desc)||'—'}${r.paid===false?' (unpaid)':''}${r.method?' · '+esc(r.method):''}</span><span>${fmt(r.amount ?? r.actual ?? 0)}</span></div>`).join('')
+                     : '<div class="hl"><span>—</span><span></span></div>';
+}
+function renderHistory(){
+  const box = $('list-history');
+  if(!state.history.length){ box.innerHTML = '<div class="empty">No archived periods yet.</div>'; return; }
+  box.innerHTML = state.history.map(h => `
+    <details class="hist">
+      <summary><span>${esc(h.label)}<small>Income ${fmt(h.income)} · Spent ${fmt(h.totalExpenses)}</small></span></summary>
+      <div class="hist-body">
+        ${h.moveFromEss>0 ? `<p class="hint">${fmt(h.moveFromEss)} was moved from Essentials to Non-Essentials this period.</p>` : ''}
+        <h4>Essentials</h4>${histLines(h.essentials)}
+        <h4>Non-Essentials</h4>${histLines(h.nonEssentials)}
+        ${Array.isArray(h.cards)&&h.cards.length ? `<h4>Cards</h4>${h.cards.map(c=>`<div class="hl"><span>${esc(c.name)} · paid</span><span>${fmt(c.payment)}</span></div>`).join('')}` : ''}
+        <button class="btn ghost block" style="margin-top:14px;color:var(--red);" data-action="delHist" data-id="${h.id}">Delete this period</button>
+      </div>
+    </details>`).join('');
+}
+
+function syncInputs(){
+  document.querySelectorAll('[data-field]').forEach(el => {
+    const f = el.dataset.field, v = state[f];
+    el.value = el.dataset.num ? numVal(v) : (v ?? '');
+  });
+}
+function renderAll(){ syncInputs(); renderLists(); updateTotals(); }
+
+function showTab(tab){
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-'+tab));
+  document.querySelectorAll('nav.bottom button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  window.scrollTo(0,0);
+}
+function showSeg(seg){
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.seg === seg));
+  document.querySelectorAll('.subpanel').forEach(p => p.classList.toggle('on', p.id === 'sub-'+seg));
+}
+
+let toastTimer = null;
+function toast(msg, actLabel, actFn){
+  setText('toastMsg', msg);
+  const b = $('toastAct');
+  if(actLabel){ b.style.display=''; b.textContent=actLabel; b.onclick = () => { actFn(); hideToast(); }; }
+  else { b.style.display='none'; b.onclick=null; }
+  $('toast').classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, actLabel ? 5000 : 2600);
+}
+function hideToast(){ $('toast').classList.remove('show'); }
+function askConfirm(msg, okLabel='Confirm'){
+  return new Promise(resolve => {
+    setText('sheetMsg', msg); $('sheetOk').textContent = okLabel;
+    $('backdrop').classList.add('show');
+    const done = v => { $('backdrop').classList.remove('show'); $('sheetOk').onclick = $('sheetCancel').onclick = null; resolve(v); };
+    $('sheetOk').onclick = () => done(true);
+    $('sheetCancel').onclick = () => done(false);
+  });
+}
+
+document.body.addEventListener('input', e => {
+  const t = e.target;
+  if(t.dataset.list){
+    const row = state[t.dataset.list][+t.dataset.idx]; if(!row) return;
+    row[t.dataset.key] = t.type==='number' ? (parseFloat(t.value)||0) : t.value;
+    save(); updateTotals();
+  } else if(t.dataset.card){
+    const [idx, key] = t.dataset.card.split(':');
+    const card = state.cards[+idx]; if(!card) return;
+    if(key === 'name'){
+      const prev = card.name;
+      card.name = t.value;
+      // keep rows pointing at this card when it's renamed
+      if(prev && prev !== card.name){
+        state.essentials.forEach(r => { if(r.method === prev) r.method = card.name; });
+        state.nonEssentials.forEach(r => { if(r.method === prev) r.method = card.name; });
+      }
+      save(); updateTotals();
+    } else {
+      card[key] = parseFloat(t.value)||0;
+      save(); renderLists(); updateTotals();
+    }
+  } else if(t.dataset.field){
+    const f = t.dataset.field; let v = t.value;
+    if(t.dataset.num){ v = parseFloat(v)||0; if(f==='moveFromEss') v = Math.max(0,v); }
+    state[f] = v; save(); updateTotals();
+  }
+});
+
+document.body.addEventListener('click', async e => {
+  const el = e.target.closest('[data-tab],[data-seg],[data-add],[data-del],[data-delcard],[data-toggle],[data-action],[data-method],[data-move]');
+  if(!el) return;
+  const d = el.dataset;
+
+  if(d.tab){ showTab(d.tab); return; }
+  if(d.seg){ showSeg(d.seg); return; }
+  if(d.method !== undefined){
+    const [list, idx] = d.method.split(':');
+    const r = state[list][+idx];
+    r.method = (r.method === d.m) ? '' : d.m;
+    save(); renderLists(); updateTotals(); return;
+  }
+  if(d.move !== undefined){
+    const [from, idx, to] = d.move.split(':');
+    const row = state[from].splice(+idx,1)[0];
+    state[to].push(row); save(); renderLists(); updateTotals();
+    toast(`Moved to ${to==='essentials'?'Essentials':'Non-Essentials'}`, 'Undo', () => {
+      const back = state[to].pop(); state[from].splice(+idx,0,back); save(); renderLists(); updateTotals();
+    });
+    return;
+  }
+  if(d.toggle){
+    const r = state[d.toggle][+d.idx];
+    r.paid = r.paid === false;
+    if(r.paid && !r.date) r.date = todayISO();
+    save(); renderLists(); updateTotals(); return;
+  }
+  if(d.add){
+    if(d.add === 'cards'){
+      state.cards.push({id:'c'+Date.now(), name:"New card", balance:0, payment:0});
+      save(); renderLists(); updateTotals();
+      const names = document.querySelectorAll('[data-card$=":name"]');
+      const last = names[names.length-1];
+      if(last){ last.scrollIntoView({block:'center',behavior:'smooth'}); last.focus({preventScroll:true}); last.select && last.select(); }
+      return;
+    }
+    state[d.add].push({desc:"", budget:0, amount:0, date:todayISO(), method:"", paid:true});
+    save(); renderLists(); updateTotals();
+    const inputs = document.querySelectorAll(`[data-list="${d.add}"][data-key="desc"]`);
+    const last = inputs[inputs.length-1];
+    if(last){ last.scrollIntoView({block:'center',behavior:'smooth'}); last.focus({preventScroll:true}); }
+    return;
+  }
+  if(d.delcard !== undefined){
+    const idx = +d.delcard, card = state.cards[idx];
+    if(!(await askConfirm(`Delete "${card.name}"? Rows tagged with it keep the tag until you change them.`,'Delete'))) return;
+    state.cards.splice(idx,1); save(); renderLists(); updateTotals(); return;
+  }
+  if(d.del){
+    const list = d.del, idx = +d.idx, removed = state[list].splice(idx,1)[0];
+    save(); renderLists(); updateTotals();
+    toast('Deleted','Undo',() => { state[list].splice(idx,0,removed); save(); renderLists(); updateTotals(); });
+    return;
+  }
+
+  switch(d.action){
+    case 'cashLeft': {
+      state.nonEssentials.push({desc:"Cash left over", budget:0, amount:0, date:todayISO(), method:"Cash", paid:true});
+      save(); renderLists(); updateTotals();
+      const rows = document.querySelectorAll('[data-list="nonEssentials"][data-key="amount"]');
+      const last = rows[rows.length-1];
+      if(last){ last.scrollIntoView({block:'center',behavior:'smooth'}); last.focus({preventScroll:true}); }
+      toast('Enter the cash you still have as a minus amount, e.g. -400');
+      break; }
+    case 'addRoom': {
+      const v = parseFloat($('roomAdd').value)||0; if(v === 0) return;
+      state.roomSaved = (Number(state.roomSaved)||0) + v;
+      $('roomAdd').value = ''; syncInputs(); save(); updateTotals();
+      toast('Added '+fmt(v)+' to Room Repair');
+      break; }
+    case 'archive': {
+      const c = compute();
+      if(!(c.income>0 || c.essActual>0 || c.nonEss>0)){ toast('Nothing to archive yet. Fill in this cutoff first.'); return; }
+      const label = state.periodLabel || ('Period ending ' + new Date().toLocaleDateString('en-PH'));
+      if(!(await askConfirm(`Archive "${label}" and clear the sheet for a new period? Your Room Repair amount and card balances are kept.`,'Archive'))) return;
+      state.history.unshift({
+        id: Date.now(), label, closedAt: new Date().toISOString(),
+        income: state.income, moveFromEss: state.moveFromEss||0,
+        essentials: JSON.parse(JSON.stringify(state.essentials)),
+        nonEssentials: JSON.parse(JSON.stringify(state.nonEssentials)),
+        cards: state.cards.map(cd => ({name:cd.name, payment:Number(cd.payment)||0, charged:c.chargedBy[cd.id]||0})),
+        essActualTotal: c.essActual, nonEssTotal: c.nonEss,
+        totalExpenses: c.essActual + c.nonEss
+      });
+      // Roll each card's balance forward, then clear this period's rows.
+      state.cards = state.cards.map(cd => ({...cd,
+        balance: (Number(cd.balance)||0) + (c.chargedBy[cd.id]||0) - (Number(cd.payment)||0), payment: 0}));
+      state.income = 0; state.periodLabel = "";
+      const reset = r => ({desc:r.desc, budget:r.budget, amount: r.paid===false ? r.amount : 0,
+                           date: r.paid===false ? r.date : "", method:r.method, paid:r.paid});
+      state.essentials = state.essentials.map(reset);
+      state.nonEssentials = state.nonEssentials.filter(r => r.paid===false || (r.desc||'').trim()).map(reset);
+      if(!state.nonEssentials.length) state.nonEssentials = [{desc:"", budget:0, amount:0, date:todayISO(), method:"", paid:true}];
+      save(); renderAll(); showTab('home'); toast('Archived. Fresh sheet ready.');
+      break; }
+    case 'delHist':
+      if(await askConfirm('Delete this archived period? This cannot be undone.','Delete')){
+        state.history = state.history.filter(h => String(h.id) !== d.id); save(); renderLists();
+      }
+      break;
+    case 'resetAll':
+      if(await askConfirm('Reset EVERYTHING: income, all lists, your cards, the Room Repair amount and all history? This cannot be undone.','Reset all')){
+        state = defaults(); save(); renderAll(); showTab('home'); toast('Everything reset.');
+      }
+      break;
+    case 'showBackup': { const b = $('backupBox'); b.value = JSON.stringify(state); b.focus(); b.select(); break; }
+    case 'copyBackup': {
+      const b = $('backupBox'); b.value = JSON.stringify(state); b.focus(); b.select();
+      let ok = false;
+      try{ if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(b.value); ok = true; } }catch(_){}
+      if(!ok){ try{ ok = document.execCommand('copy'); }catch(_){} }
+      toast(ok ? 'Backup copied' : 'Select the text and copy it manually'); break; }
+    case 'restoreBackup': {
+      const raw = $('backupBox').value.trim(); if(!raw){ toast('Paste your backup text first'); return; }
+      let parsed; try{ parsed = JSON.parse(raw); }catch(_){ toast("That doesn't look like a valid backup"); return; }
+      if(!parsed || typeof parsed !== 'object'){ toast("That doesn't look like a valid backup"); return; }
+      if(await askConfirm('Replace everything on this device with the pasted backup?','Restore')){
+        state = normalizeState(parsed); save(); renderAll(); $('backupBox').value=''; showTab('home'); toast('Backup restored');
+      }
+      break; }
+  }
+});
+
+load();
+
+try{ (function(){
+  const mm = window.matchMedia ? window.matchMedia('(display-mode: standalone)').matches : false;
+  const standalone = mm || window.navigator.standalone === true;
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const how = $('installHow'), btn = $('installBtn'), note = $('installedNote');
+  if(standalone){ how.style.display='none'; note.style.display=''; return; }
+  how.textContent = isIOS
+    ? 'In Safari, tap the Share button at the bottom, then "Add to Home Screen". It then opens full screen like an app.'
+    : 'In Chrome, tap the ⋮ menu, then "Add to Home screen" or "Install app". It then opens full screen like an app.';
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', ev => { ev.preventDefault(); deferred = ev; btn.style.display=''; });
+  btn.addEventListener('click', async () => {
+    if(!deferred) return;
+    deferred.prompt(); try{ await deferred.userChoice; }catch(_){}
+    deferred = null; btn.style.display='none';
+  });
+  window.addEventListener('appinstalled', () => { btn.style.display='none'; how.textContent='Installed. Open it from your home screen from now on.'; });
+})(); }catch(e){ console.warn('install helper unavailable', e); }
+</script>
+</body>
+</html>
