@@ -9,7 +9,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Budget">
-<meta name="description" content="50/30/20 biweekly budget tracker">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -135,6 +134,19 @@
   .note-line{font-size:.74rem; color:var(--ink-soft); margin:-4px 0 12px; padding:0 2px;}
   .note-line b{font-family:var(--mono); color:var(--ink);}
 
+  .recbar{display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px;}
+  .recbar button{flex:0 0 auto; height:38px; padding:0 14px; border-radius:19px; border:1.5px solid var(--rule);
+    background:var(--surface); color:var(--ink-soft); font-size:.78rem; font-weight:600; white-space:nowrap;}
+  .recbar button.on{background:var(--ink-bg); border-color:var(--ink-bg); color:var(--on-dark);}
+  .banner{background:var(--gold-soft); border:1.5px solid var(--gold); color:#6b5310; border-radius:12px;
+    padding:10px 12px; margin-bottom:12px; font-size:.8rem; display:flex; align-items:center; gap:10px;}
+  .banner b{font-weight:700;}
+  .banner button{margin-left:auto; flex:0 0 auto; height:34px; padding:0 12px; border-radius:9px; border:none;
+    background:var(--ink-bg); color:var(--on-dark); font-size:.76rem; font-weight:600;}
+  body.viewing input, body.viewing select, body.viewing .paidbtn, body.viewing .del,
+  body.viewing .movebtn, body.viewing .addbtn, body.viewing .chips button{pointer-events:none; opacity:.75;}
+  body.viewing #recordBar button, body.viewing .banner button{pointer-events:auto; opacity:1;}
+  body.viewing #view-home .card[data-tab="goal"]{display:none;}
   .goal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px;}
   .pill{font-family:var(--mono); font-size:.68rem; background:var(--green-soft); color:var(--green); padding:4px 9px; border-radius:20px; font-weight:600; white-space:nowrap;}
   .pill.owe{background:var(--red-soft); color:var(--red);}
@@ -198,9 +210,11 @@
 
   <!-- HOME -->
   <section class="view active" id="view-home">
+    <div id="recordBar"></div>
+    <div id="viewBanner"></div>
     <div class="card">
-      <label class="lbl">Pay period label</label>
-      <input type="text" data-field="periodLabel" placeholder="e.g. Oct 16–31, 2026" autocomplete="off">
+      <label class="lbl">Date salary received</label>
+      <input type="date" data-field="payDate">
       <label class="lbl" style="margin-top:14px;">Total income this cutoff (₱)</label>
       <input type="number" inputmode="decimal" step="0.01" class="big" data-field="income" data-num="1" placeholder="0.00">
     </div>
@@ -372,6 +386,12 @@ const fmt  = n => '₱' + (Number(n)||0).toLocaleString('en-PH',{minimumFraction
 const fmtS = n => '₱' + (Number(n)||0).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:2});
 const esc  = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const numVal = v => (Number(v) ? Number(v) : '');
+const prettyDate = iso => {
+  if(!iso) return '';
+  const [y,m,dd] = iso.split('-').map(Number);
+  const dt = new Date(y, (m||1)-1, dd||1);
+  return isNaN(dt) ? iso : dt.toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
+};
 const todayISO = () => new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
 const $ = id => document.getElementById(id);
 const setText = (id,t) => { const el = $(id); if(el) el.textContent = t; };
@@ -415,10 +435,13 @@ if(window.matchMedia){
   mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
 }
 const BASE_METHODS = ['Cash','Debit','GCash'];
+const MAX_RECORDS = 3;          // keep the phone snappy
+let viewingId = null;           // null = the cutoff you're working on
+const openRecord = () => viewingId ? state.history.find(h => String(h.id) === String(viewingId)) : null;
 
 function defaults(){
   return {
-    income: 0, periodLabel: "", history: [],
+    income: 0, payDate: "", history: [],
     essentials: [
       {desc:"Groceries", budget:5000, amount:0, date:"", method:"", paid:true},
       {desc:"Transportation", budget:1500, amount:0, date:"", method:"", paid:true},
@@ -483,6 +506,8 @@ function normalizeState(s){
   out.essentials = out.essentials.map(retag);
   out.nonEssentials = out.nonEssentials.map(retag);
 
+  out.payDate = s?.payDate || "";
+  delete out.periodLabel;
   out.roomGoal = Number(s?.roomGoal ?? s?.goalAmount ?? d.roomGoal)||0;
   out.roomSaved = Number(s?.roomSaved)||0;
 
@@ -513,22 +538,32 @@ const methodList = () => BASE_METHODS.concat(state.cards.map(c => c.name).filter
 const isCardMethod = m => state.cards.some(c => c.name === m);
 
 function compute(){
-  const income = Number(state.income)||0;
-  const moveAmt = income > 0 ? Math.max(0, Math.min(Number(state.moveFromEss)||0, income*0.5)) : 0;
+  const rec = openRecord();
+  const src = rec || state;
+  const ess = src.essentials || [], non = src.nonEssentials || [];
+
+  const income = Number(src.income)||0;
+  const moveAmt = income > 0 ? Math.max(0, Math.min(Number(src.moveFromEss)||0, income*0.5)) : 0;
   const capNeeds = income*0.5 - moveAmt, capWants = income*0.3 + moveAmt, capSave = income*0.2;
 
-  const essBudget = state.essentials.reduce((s,r)=>s+(Number(r.budget)||0),0);
-  const essTyped = state.essentials.filter(r=>r.paid!==false).reduce((s,r)=>s+(Number(r.amount)||0),0);
-  const cardPayments = state.cards.reduce((s,c)=>s+(Number(c.payment)||0),0);
-  const essActual = essTyped + cardPayments;
-  const nonEss = state.nonEssentials.filter(r=>r.paid!==false).reduce((s,r)=>s+(Number(r.amount)||0),0);
-  const unpaid = state.essentials.concat(state.nonEssentials)
-    .filter(r=>r.paid===false).reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const essBudget = ess.reduce((s,r)=>s+(Number(r.budget)||0),0);
+  const essTyped = ess.filter(r=>r.paid!==false).reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const nonEss = non.filter(r=>r.paid!==false).reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const unpaid = ess.concat(non).filter(r=>r.paid===false).reduce((s,r)=>s+(Number(r.amount)||0),0);
 
-  const all = state.essentials.concat(state.nonEssentials).filter(r=>r.paid!==false);
   const chargedBy = {};
-  state.cards.forEach(c => { chargedBy[c.id] = all.filter(r=>r.method===c.name).reduce((s,r)=>s+(Number(r.amount)||0),0); });
-  const onCard = Object.values(chargedBy).reduce((s,v)=>s+v,0);
+  let cardPayments = 0, onCard = 0;
+  if(rec){
+    (rec.cards||[]).forEach((cd,i) => { chargedBy['r'+i] = Number(cd.charged)||0; });
+    cardPayments = (rec.cards||[]).reduce((s,cd)=>s+(Number(cd.payment)||0),0);
+    onCard = (rec.cards||[]).reduce((s,cd)=>s+(Number(cd.charged)||0),0);
+  } else {
+    const all = ess.concat(non).filter(r=>r.paid!==false);
+    state.cards.forEach(cd => { chargedBy[cd.id] = all.filter(r=>r.method===cd.name).reduce((s,r)=>s+(Number(r.amount)||0),0); });
+    cardPayments = state.cards.reduce((s,cd)=>s+(Number(cd.payment)||0),0);
+    onCard = Object.values(chargedBy).reduce((s,v)=>s+v,0);
+  }
+  const essActual = essTyped + cardPayments;
 
   return {income, moveAmt, capNeeds, capWants, capSave, essBudget, essTyped, essActual,
           nonEss, unpaid, cardPayments, chargedBy, onCard};
@@ -554,6 +589,19 @@ function updateTotals(){
   $('essBreakdown').innerHTML = c.cardPayments>0 ? `Includes card payments of <b>${fmt(c.cardPayments)}</b>` : '';
   $('cardNote').innerHTML = c.onCard>0 ? `<b>${fmt(c.onCard)}</b> of your spending went on a card, so it hasn't left your account yet.` : '';
   setText('unpaidPill', fmt(c.unpaid));
+
+  if(!openRecord()) state.cards.forEach(card => {
+    const charged = c.chargedBy[card.id]||0;
+    const after = (Number(card.balance)||0) + charged - (Number(card.payment)||0);
+    const put = (suffix, val) => {
+      const el = document.querySelector(`[data-cardout="${card.id}:${suffix}"]`);
+      if(el) el.textContent = val;
+    };
+    put('charged', fmt(charged));
+    put('paid', fmt(card.payment||0));
+    put('after2', fmt(after));
+    put('after', fmt(after) + ' owed');
+  });
 
   const goal = Number(state.roomGoal)||0, saved = Number(state.roomSaved)||0;
   const pct = goal>0 ? Math.min(Math.max(saved/goal*100,0),100) : 0;
@@ -588,13 +636,46 @@ function expenseRow(list, r, i){
   </div>`;
 }
 
+function renderRecordBar(){
+  const bar = $('recordBar');
+  const recs = state.history.slice(0, MAX_RECORDS);
+  bar.innerHTML = '<div class="recbar">'
+    + `<button data-openrec="current" class="${viewingId ? '' : 'on'}">Current</button>`
+    + recs.map(h => `<button data-openrec="${h.id}" class="${String(viewingId)===String(h.id) ? 'on' : ''}">${esc(h.label)}</button>`).join('')
+    + '</div>';
+  const rec = openRecord();
+  $('viewBanner').innerHTML = rec
+    ? `<div class="banner"><span style="flex:1;min-width:0;"><b>${esc(rec.label)}</b> · saved record, read only</span><button data-openrec="current">Back to current</button></div>`
+    : '';
+  document.body.classList.toggle('viewing', !!rec);
+}
+
 function renderLists(){
-  $('list-essentials').innerHTML = state.essentials.length
-    ? state.essentials.map((r,i)=>expenseRow('essentials',r,i)).join('') : '<div class="empty">No expenses yet.</div>';
-  $('list-nonEss').innerHTML = state.nonEssentials.length
-    ? state.nonEssentials.map((r,i)=>expenseRow('nonEssentials',r,i)).join('') : '<div class="empty">No expenses yet.</div>';
+  const rec = openRecord();
+  const src = rec || state;
+  const ess = src.essentials || [], non = src.nonEssentials || [];
+
+  renderRecordBar();
+
+  $('list-essentials').innerHTML = ess.length
+    ? ess.map((r,i)=>expenseRow('essentials',r,i)).join('') : '<div class="empty">No expenses here.</div>';
+  $('list-nonEss').innerHTML = non.length
+    ? non.map((r,i)=>expenseRow('nonEssentials',r,i)).join('') : '<div class="empty">No expenses here.</div>';
 
   const c = compute();
+
+  if(rec){
+    // A saved record keeps a snapshot of each card, so there is nothing to edit.
+    $('list-cards').innerHTML = (rec.cards||[]).length ? (rec.cards||[]).map(cd => `
+      <div class="card">
+        <div class="goal-head"><h2>${esc(cd.name)}</h2></div>
+        <div class="trio" style="margin-bottom:0;">
+          <div><small>Charged</small><b>${fmt(cd.charged||0)}</b></div>
+          <div><small>You paid</small><b>${fmt(cd.payment||0)}</b></div>
+          <div><small>&nbsp;</small><b>&nbsp;</b></div>
+        </div>
+      </div>`).join('') : '<div class="empty">No cards in this record.</div>';
+  } else {
   $('list-cards').innerHTML = state.cards.length ? state.cards.map((card,i) => {
     const charged = c.chargedBy[card.id]||0;
     const after = (Number(card.balance)||0) + charged - (Number(card.payment)||0);
@@ -604,22 +685,23 @@ function renderLists(){
         <input class="inp" type="text" data-card="${i}:name" value="${esc(card.name)}" placeholder="Card name" style="font-family:var(--serif);font-weight:600;">
         <button class="del" data-delcard="${i}" aria-label="Delete card">✕</button>
       </div>
-      <div class="goal-head" style="margin:6px 0 10px;"><span class="pill owe">${fmt(after)} owed</span></div>
+      <div class="goal-head" style="margin:6px 0 10px;"><span class="pill owe" data-cardout="${card.id}:after">${fmt(after)} owed</span></div>
       <label class="lbl">Balance owed (from your statement)</label>
       <input type="number" inputmode="decimal" step="0.01" data-card="${i}:balance" value="${numVal(card.balance)}">
       <label class="lbl" style="margin-top:12px;">Payment you made this cutoff</label>
       <input type="number" inputmode="decimal" step="0.01" data-card="${i}:payment" value="${numVal(card.payment)}">
       <div class="trio" style="margin-top:14px;margin-bottom:0;">
-        <div><small>Charged</small><b>${fmt(charged)}</b></div>
-        <div><small>You paid</small><b>${fmt(card.payment||0)}</b></div>
-        <div><small>Balance after</small><b>${fmt(after)}</b></div>
+        <div><small>Charged</small><b data-cardout="${card.id}:charged">${fmt(charged)}</b></div>
+        <div><small>You paid</small><b data-cardout="${card.id}:paid">${fmt(card.payment||0)}</b></div>
+        <div><small>Balance after</small><b data-cardout="${card.id}:after2">${fmt(after)}</b></div>
       </div>
     </div>`;
   }).join('') : '<div class="empty">No cards yet.</div>';
+  }
 
   const items = [];
-  state.essentials.forEach((r,i)=>{ if(r.paid===false) items.push({list:'essentials',i,r,tag:'Essentials'}); });
-  state.nonEssentials.forEach((r,i)=>{ if(r.paid===false) items.push({list:'nonEssentials',i,r,tag:'Non-Essentials'}); });
+  ess.forEach((r,i)=>{ if(r.paid===false) items.push({list:'essentials',i,r,tag:'Essentials'}); });
+  non.forEach((r,i)=>{ if(r.paid===false) items.push({list:'nonEssentials',i,r,tag:'Non-Essentials'}); });
   $('list-unpaid').innerHTML = items.length ? items.map(u => `
     <div class="row unpaid"><div class="row-top">
       <button class="paidbtn" data-toggle="${u.list}" data-idx="${u.i}" aria-label="Mark paid">✓</button>
@@ -658,7 +740,21 @@ function syncInputs(){
     el.value = el.dataset.num ? numVal(v) : (v ?? '');
   });
 }
-function renderAll(){ syncInputs(); renderLists(); updateTotals(); }
+function renderAll(){
+  const rec = openRecord();
+  // when a record is open, the header shows that record's income and date
+  if(rec){
+    const inc = document.querySelector('[data-field=income]');
+    const dt = document.querySelector('[data-field=payDate]');
+    if(inc) inc.value = numVal(rec.income);
+    if(dt) dt.value = rec.payDate || '';
+    const mv = document.querySelector('[data-field=moveFromEss]');
+    if(mv) mv.value = numVal(rec.moveFromEss);
+  } else {
+    syncInputs();
+  }
+  renderLists(); updateTotals();
+}
 
 function showTab(tab){
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-'+tab));
@@ -691,6 +787,7 @@ function askConfirm(msg, okLabel='Confirm'){
 }
 
 document.body.addEventListener('input', e => {
+  if(openRecord()) return;   // saved records are read only
   const t = e.target;
   if(t.dataset.list){
     const row = state[t.dataset.list][+t.dataset.idx]; if(!row) return;
@@ -710,7 +807,7 @@ document.body.addEventListener('input', e => {
       save(); updateTotals();
     } else {
       card[key] = parseFloat(t.value)||0;
-      save(); renderLists(); updateTotals();
+      save(); updateTotals();   // in-place update, so the number keypad stays open
     }
   } else if(t.dataset.field){
     const f = t.dataset.field; let v = t.value;
@@ -725,11 +822,21 @@ document.getElementById('themeBtn').addEventListener('click', () => {
 });
 
 document.body.addEventListener('click', async e => {
-  const el = e.target.closest('[data-tab],[data-seg],[data-add],[data-del],[data-delcard],[data-toggle],[data-action],[data-method],[data-move]');
+  const el = e.target.closest('[data-openrec],[data-tab],[data-seg],[data-add],[data-del],[data-delcard],[data-toggle],[data-action],[data-method],[data-move]');
   if(!el) return;
   const d = el.dataset;
 
+  if(d.openrec !== undefined){
+    viewingId = (d.openrec === 'current') ? null : d.openrec;
+    renderAll(); showTab('home'); window.scrollTo(0,0);
+    return;
+  }
   if(d.themeSet){ setTheme(d.themeSet); return; }
+  if(openRecord() && (d.add || d.del || d.toggle || d.method !== undefined || d.move !== undefined
+      || d.delcard !== undefined || ['cashLeft','addRoom','archive','resetAll','restoreBackup'].includes(d.action))){
+    toast('This is a saved record. Switch to Current to make changes.');
+    return;
+  }
   if(d.tab){ showTab(d.tab); return; }
   if(d.seg){ showSeg(d.seg); return; }
   if(d.method !== undefined){
@@ -799,21 +906,22 @@ document.body.addEventListener('click', async e => {
     case 'archive': {
       const c = compute();
       if(!(c.income>0 || c.essActual>0 || c.nonEss>0)){ toast('Nothing to archive yet. Fill in this cutoff first.'); return; }
-      const label = state.periodLabel || ('Period ending ' + new Date().toLocaleDateString('en-PH'));
+      const label = state.payDate ? prettyDate(state.payDate) : ('Saved ' + new Date().toLocaleDateString('en-PH'));
       if(!(await askConfirm(`Archive "${label}" and clear the sheet for a new period? Your Room Repair amount and card balances are kept.`,'Archive'))) return;
       state.history.unshift({
         id: Date.now(), label, closedAt: new Date().toISOString(),
-        income: state.income, moveFromEss: state.moveFromEss||0,
+        income: state.income, payDate: state.payDate, moveFromEss: state.moveFromEss||0,
         essentials: JSON.parse(JSON.stringify(state.essentials)),
         nonEssentials: JSON.parse(JSON.stringify(state.nonEssentials)),
         cards: state.cards.map(cd => ({name:cd.name, payment:Number(cd.payment)||0, charged:c.chargedBy[cd.id]||0})),
         essActualTotal: c.essActual, nonEssTotal: c.nonEss,
         totalExpenses: c.essActual + c.nonEss
       });
+      if(state.history.length > MAX_RECORDS) state.history = state.history.slice(0, MAX_RECORDS);
       // Roll each card's balance forward, then clear this period's rows.
       state.cards = state.cards.map(cd => ({...cd,
         balance: (Number(cd.balance)||0) + (c.chargedBy[cd.id]||0) - (Number(cd.payment)||0), payment: 0}));
-      state.income = 0; state.periodLabel = "";
+      state.income = 0; state.payDate = "";
       const reset = r => ({desc:r.desc, budget:r.budget, amount: r.paid===false ? r.amount : 0,
                            date: r.paid===false ? r.date : "", method:r.method, paid:r.paid});
       state.essentials = state.essentials.map(reset);
@@ -823,12 +931,14 @@ document.body.addEventListener('click', async e => {
       break; }
     case 'delHist':
       if(await askConfirm('Delete this archived period? This cannot be undone.','Delete')){
-        state.history = state.history.filter(h => String(h.id) !== d.id); save(); renderLists();
+        state.history = state.history.filter(h => String(h.id) !== d.id);
+        if(String(viewingId) === String(d.id)) viewingId = null;
+        save(); renderAll();
       }
       break;
     case 'resetAll':
       if(await askConfirm('Reset EVERYTHING: income, all lists, your cards, the Room Repair amount and all history? This cannot be undone.','Reset all')){
-        state = defaults(); save(); renderAll(); showTab('home'); toast('Everything reset.');
+        state = defaults(); viewingId = null; save(); renderAll(); showTab('home'); toast('Everything reset.');
       }
       break;
     case 'showBackup': { const b = $('backupBox'); b.value = JSON.stringify(state); b.focus(); b.select(); break; }
@@ -843,7 +953,7 @@ document.body.addEventListener('click', async e => {
       let parsed; try{ parsed = JSON.parse(raw); }catch(_){ toast("That doesn't look like a valid backup"); return; }
       if(!parsed || typeof parsed !== 'object'){ toast("That doesn't look like a valid backup"); return; }
       if(await askConfirm('Replace everything on this device with the pasted backup?','Restore')){
-        state = normalizeState(parsed); save(); renderAll(); $('backupBox').value=''; showTab('home'); toast('Backup restored');
+        state = normalizeState(parsed); viewingId = null; save(); renderAll(); $('backupBox').value=''; showTab('home'); toast('Backup restored');
       }
       break; }
   }
