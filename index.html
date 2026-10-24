@@ -95,6 +95,12 @@
   .stat.save{background:var(--green);} .stat.extra{background:var(--slate);}
   .stat.wide{grid-column:1 / -1; margin-bottom:10px;}
   .stat.wide .s-lbl{min-height:0;}
+  .split{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; padding-top:10px; border-top:1px dashed rgba(255,255,255,.4);}
+  .chip{background:rgba(255,255,255,.16); border-radius:10px; padding:8px 10px; min-width:0;}
+  .chip span{display:block; font-size:.62rem; text-transform:uppercase; letter-spacing:.4px; opacity:.85;}
+  .chip b{display:block; font-family:var(--mono); font-size:1rem; margin-top:2px; overflow-wrap:anywhere;}
+  .estimate{background:var(--green-soft); border-radius:10px; padding:10px 12px; margin:14px 0 4px; font-size:.82rem; line-height:1.5;}
+  .estimate b{font-family:var(--mono);}
 
   .trio{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px;}
   .trio div{background:var(--surface); border:1.5px solid var(--rule); border-radius:12px; padding:9px 8px; text-align:center; min-width:0;}
@@ -134,6 +140,13 @@
   .note-line{font-size:.74rem; color:var(--ink-soft); margin:-4px 0 12px; padding:0 2px;}
   .note-line b{font-family:var(--mono); color:var(--ink);}
 
+  .date-words-wrap{position:relative;}
+  .date-words-wrap input[type=date]{color:transparent;}
+  /* hide Chrome/Safari's editable date text and its blue segment highlight; the calendar icon stays */
+  .date-words-wrap input[type=date]::-webkit-datetime-edit{opacity:0;}
+  .date-words{position:absolute; left:13px; top:50%; transform:translateY(-50%); pointer-events:none;
+    font-size:16px; font-family:var(--sans); font-weight:500; color:var(--ink); white-space:nowrap;}
+  .date-words.empty{color:var(--ink-soft); font-weight:400;}
   .recbar{display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px;}
   .recbar button{flex:0 0 auto; height:38px; padding:0 14px; border-radius:19px; border:1.5px solid var(--rule);
     background:var(--surface); color:var(--ink-soft); font-size:.78rem; font-weight:600; white-space:nowrap;}
@@ -214,7 +227,10 @@
     <div id="viewBanner"></div>
     <div class="card">
       <label class="lbl">Date salary received</label>
-      <input type="date" data-field="payDate">
+      <div class="date-words-wrap">
+        <input type="date" data-field="payDate" aria-describedby="payDateWords">
+        <span class="date-words empty" id="payDateWords">Pick a date</span>
+      </div>
       <label class="lbl" style="margin-top:14px;">Total income this cutoff (₱)</label>
       <input type="number" inputmode="decimal" step="0.01" class="big" data-field="income" data-num="1" placeholder="0.00">
     </div>
@@ -226,6 +242,10 @@
     <div class="stat save wide">
       <div class="s-lbl">Savings 20% — set this aside</div>
       <div class="s-val" id="capSave">₱0.00</div>
+      <div class="split">
+        <div class="chip"><span id="splitRoomLbl">Room Repair 60%</span><b id="splitRoomAmt">₱0.00</b></div>
+        <div class="chip"><span id="splitRestLbl">Rest of savings 40%</span><b id="splitRestAmt">₱0.00</b></div>
+      </div>
     </div>
     <div class="grid2">
       <div class="stat"><div class="s-lbl">Total expenses</div><div class="s-val" id="totalExpenses">₱0.00</div></div>
@@ -297,7 +317,11 @@
       <div class="meter"><div class="fill" id="roomFill"></div></div>
       <div class="meter-meta"><span id="roomLeft">₱0.00 left</span></div>
 
-      <label class="lbl">Amount saved so far (₱)</label>
+      <label class="lbl">Share of each Savings 20% for Room Repair (%)</label>
+      <input type="number" inputmode="decimal" step="1" min="0" max="100" data-field="roomSplit" data-num="1">
+      <div class="estimate" id="roomEstimate"></div>
+
+      <label class="lbl" style="margin-top:14px;">Amount saved so far (₱)</label>
       <input type="number" inputmode="decimal" step="0.01" data-field="roomSaved" data-num="1" placeholder="0.00">
       <p class="hint" style="margin-top:6px;">Type whatever you actually have set aside for the repair. Nothing is added automatically, so this always matches your bank.</p>
 
@@ -386,12 +410,21 @@ const fmt  = n => '₱' + (Number(n)||0).toLocaleString('en-PH',{minimumFraction
 const fmtS = n => '₱' + (Number(n)||0).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:2});
 const esc  = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const numVal = v => (Number(v) ? Number(v) : '');
+const MONTHS = ['Jan.','Feb.','Mar.','Apr.','May','Jun.','Jul.','Aug.','Sep.','Oct.','Nov.','Dec.'];
+// 2026-10-23 -> "Oct. 23, 2026"
 const prettyDate = iso => {
   if(!iso) return '';
   const [y,m,dd] = iso.split('-').map(Number);
-  const dt = new Date(y, (m||1)-1, dd||1);
-  return isNaN(dt) ? iso : dt.toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
+  if(!y || !m || !dd) return iso;
+  return `${MONTHS[m-1]} ${dd}, ${y}`;
 };
+// records show their salary date in words; older ones fall back to their saved label
+const recLabel = h => h.payDate ? prettyDate(h.payDate) : h.label;
+function showPayDateWords(iso){
+  const el = document.getElementById('payDateWords'); if(!el) return;
+  el.textContent = iso ? prettyDate(iso) : 'Pick a date';
+  el.classList.toggle('empty', !iso);
+}
 const todayISO = () => new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
 const $ = id => document.getElementById(id);
 const setText = (id,t) => { const el = $(id); if(el) el.textContent = t; };
@@ -454,7 +487,7 @@ function defaults(){
       {id:'c1', name:"BPI", balance:0, payment:0},
       {id:'c2', name:"UB", balance:0, payment:0}
     ],
-    roomGoal: 100000, roomSaved: 0,
+    roomGoal: 100000, roomSaved: 0, roomSplit: 60,
     moveFromEss: 0
   };
 }
@@ -510,6 +543,8 @@ function normalizeState(s){
   delete out.periodLabel;
   out.roomGoal = Number(s?.roomGoal ?? s?.goalAmount ?? d.roomGoal)||0;
   out.roomSaved = Number(s?.roomSaved)||0;
+  // the old 60/40 setting carries over if it was ever saved
+  { const v = Number(s?.roomSplit ?? s?.splitRoom ?? 60); out.roomSplit = isNaN(v) ? 60 : Math.max(0, Math.min(100, v)); }
 
   // Features that were removed.
   ['savings','splitRoom','efGoalAmount','efAlreadySaved','manualEfExtra','manualRoomExtra','roomAdjust','goalAmount','goalSaved','efGoalSaved']
@@ -572,6 +607,8 @@ function compute(){
 function signClass(boxId, val){ const el = $(boxId); if(el){ el.classList.toggle('neg', val<0); el.classList.toggle('good', val>=0); } }
 
 function updateTotals(){
+  const dateBox = document.querySelector('[data-field=payDate]');
+  if(dateBox) showPayDateWords(dateBox.value);
   const c = compute();
   setText('capNeeds', fmt(c.capNeeds)); setText('capWants', fmt(c.capWants)); setText('capSave', fmt(c.capSave));
   const movedLbl = (base, sign) => c.moveAmt>0
@@ -603,7 +640,30 @@ function updateTotals(){
     put('after', fmt(after) + ' owed');
   });
 
+  const splitPct = Math.max(0, Math.min(100, Number(state.roomSplit ?? 60)));
+  const roomPer = c.capSave * splitPct/100, restPer = c.capSave - roomPer;
+  const pctTxt = n => String(Math.round(n*100)/100);
+  setText('splitRoomLbl', `Room Repair ${pctTxt(splitPct)}%`);
+  setText('splitRestLbl', `Rest of savings ${pctTxt(100 - splitPct)}%`);
+  setText('splitRoomAmt', fmt(roomPer)); setText('splitRestAmt', fmt(restPer));
+
   const goal = Number(state.roomGoal)||0, saved = Number(state.roomSaved)||0;
+  // estimate uses the current cutoff's income; it never changes the saved amount
+  const est = $('roomEstimate');
+  if(est){
+    const left = Math.max(goal - saved, 0);
+    const inc = Number(state.income)||0;
+    const per = inc*0.2*splitPct/100;
+    if(left <= 0) est.innerHTML = 'Goal reached. 🎉';
+    else if(per <= 0) est.innerHTML = 'Enter this cutoff\'s income on Home to see an estimate.';
+    else {
+      const cutoffs = Math.ceil(left / per);
+      const months = cutoffs * 12 / 26;   // biweekly = 26 paydays a year
+      est.innerHTML = `About <b>${fmt(per)}</b> per payday goes to the room.<br>`
+        + `At that pace, <b>${fmt(left)}</b> left takes about <b>${cutoffs} paydays</b> (~${months.toFixed(1)} months).`
+        + `<br><span style="color:var(--ink-soft);font-size:.74rem;">Estimate only. Your saved amount only changes when you update it.</span>`;
+    }
+  }
   const pct = goal>0 ? Math.min(Math.max(saved/goal*100,0),100) : 0;
   $('roomFill').style.width = pct+'%'; $('homeRoomFill').style.width = pct+'%';
   setText('roomSavedTxt', fmt(saved)); setText('roomGoalTxt', fmt(goal));
@@ -641,11 +701,11 @@ function renderRecordBar(){
   const recs = state.history.slice(0, MAX_RECORDS);
   bar.innerHTML = '<div class="recbar">'
     + `<button data-openrec="current" class="${viewingId ? '' : 'on'}">Current</button>`
-    + recs.map(h => `<button data-openrec="${h.id}" class="${String(viewingId)===String(h.id) ? 'on' : ''}">${esc(h.label)}</button>`).join('')
+    + recs.map(h => `<button data-openrec="${h.id}" class="${String(viewingId)===String(h.id) ? 'on' : ''}">${esc(recLabel(h))}</button>`).join('')
     + '</div>';
   const rec = openRecord();
   $('viewBanner').innerHTML = rec
-    ? `<div class="banner"><span style="flex:1;min-width:0;"><b>${esc(rec.label)}</b> · saved record, read only</span><button data-openrec="current">Back to current</button></div>`
+    ? `<div class="banner"><span style="flex:1;min-width:0;"><b>${esc(recLabel(rec))}</b> · saved record, read only</span><button data-openrec="current">Back to current</button></div>`
     : '';
   document.body.classList.toggle('viewing', !!rec);
 }
@@ -723,7 +783,7 @@ function renderHistory(){
   if(!state.history.length){ box.innerHTML = '<div class="empty">No archived periods yet.</div>'; return; }
   box.innerHTML = state.history.map(h => `
     <details class="hist">
-      <summary><span>${esc(h.label)}<small>Income ${fmt(h.income)} · Spent ${fmt(h.totalExpenses)}</small></span></summary>
+      <summary><span>${esc(recLabel(h))}<small>Income ${fmt(h.income)} · Spent ${fmt(h.totalExpenses)}</small></span></summary>
       <div class="hist-body">
         ${h.moveFromEss>0 ? `<p class="hint">${fmt(h.moveFromEss)} was moved from Essentials to Non-Essentials this period.</p>` : ''}
         <h4>Essentials</h4>${histLines(h.essentials)}
@@ -811,7 +871,7 @@ document.body.addEventListener('input', e => {
     }
   } else if(t.dataset.field){
     const f = t.dataset.field; let v = t.value;
-    if(t.dataset.num){ v = parseFloat(v)||0; if(f==='moveFromEss') v = Math.max(0,v); }
+    if(t.dataset.num){ v = parseFloat(v)||0; if(f==='moveFromEss') v = Math.max(0,v); if(f==='roomSplit') v = Math.max(0, Math.min(100, v)); }
     state[f] = v; save(); updateTotals();
   }
 });
